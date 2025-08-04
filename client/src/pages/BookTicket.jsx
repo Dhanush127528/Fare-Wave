@@ -111,7 +111,8 @@ const BookTicket = () => {
               </p>
               <div ref={qrRef} className="inline-block p-5 bg-white rounded-xl shadow-lg">
                 <QRCodeCanvas
-                  value={`FareWaveTicket|from=${source}|to=${destination}|time=${Date.now()}`}
+                 value={`FareWaveTicket|From:${source}|To:${destination}|Time:${Date.now()}`}
+
                   size={200}
                   bgColor="#ffffff"
                   fgColor="#000000"

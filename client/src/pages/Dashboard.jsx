@@ -2,27 +2,25 @@ import React, { useState, useEffect } from "react";
 import { FaBus, FaUser, FaTicketAlt } from "react-icons/fa";
 import { IoIosChatbubbles } from "react-icons/io";
 import MapComponent from "../components/MapComponent";
-import useUserStore from "../store/userStore";
-import { useRouteStore } from "../store/routeStore";
-import useRideHistoryStore from "../store/rideHistoryStore";
-import useAuthStore from "../store/authStore";
 import logo from "../assets/logo.png";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
 import Chatbot from "../components/Chatbot";
+import useRideHistoryStore from "../store/rideHistoryStore";
+import useUserStore from "../store/userStore";
 
 const Dashboard = () => {
-  const { token } = useAuthStore();
-  const { user, setUser, wallet, coins, setWallet } = useUserStore(); // 🟢 updated here
-  const { rides, setRideHistory } = useRideHistoryStore();
-  const { route } = useRouteStore();
   const navigate = useNavigate();
+  const { wallet, coins, setWallet } = useUserStore();
+ const { rides } = useRideHistoryStore();
   const [currentLocation, setCurrentLocation] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [showAddMoney, setShowAddMoney] = useState(false);
   const [amountToAdd, setAmountToAdd] = useState(0);
   const [showChatbotModal, setShowChatbotModal] = useState(false);
+
+  const name = localStorage.getItem("fakeUserName") || "Guest";
 
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
@@ -39,57 +37,27 @@ const Dashboard = () => {
     );
   }, []);
 
-  // 🚀 Fetch user + ride data from backend
   useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        const res = await fetch("http://localhost:5000/api/user/dashboard", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await res.json();
-        setUser({
-          name: data.message.split(",")[1]?.trim(),
-        }); // 🟢 updated here
-        setWallet(data.wallet);
-        const historyRes = await fetch("http://localhost:5000/api/user/history", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const historyData = await historyRes.json();
-        setRideHistory(historyData.rideHistory || []);
-      } catch (error) {
-        console.error("Error fetching dashboard data:", error);
-      }
-    };
+  const saved = localStorage.getItem("farewave_user");
+  if (saved) {
+    const parsed = JSON.parse(saved);
+    setWallet(parsed.wallet);
+  }
+}, []);
 
-    fetchDashboardData();
-  }, [token, setUser, setWallet, setRideHistory]); // 🟢 updated dependencies
 
   const handleLogout = () => {
     localStorage.clear();
     navigate("/");
   };
 
-  const handleAddMoney = async () => {
+  const handleAddMoney = () => {
     const amt = parseInt(amountToAdd);
     if (!isNaN(amt) && amt > 0) {
-      try {
-        const res = await fetch("http://localhost:5000/api/user/wallet", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ amount: amt }),
-        });
-
-        const data = await res.json();
-        setWallet(data.wallet);
-        toast.success("Wallet updated!");
-        setShowAddMoney(false);
-        setAmountToAdd(0);
-      } catch (err) {
-        toast.error("Failed to add money.");
-      }
+      setWallet(wallet + amt);
+      toast.success("Wallet updated!");
+      setShowAddMoney(false);
+      setAmountToAdd(0);
     }
   };
 
@@ -116,12 +84,8 @@ const Dashboard = () => {
       {currentLocation ? (
         <div className="h-[300px] w-full mb-4 rounded-xl overflow-hidden relative z-0">
           <MapComponent
-            source={
-              route?.src
-                ? [route.src.lat, route.src.lng]
-                : [currentLocation.lat, currentLocation.lng]
-            }
-            destination={route?.dest || null}
+            source={[currentLocation.lat, currentLocation.lng]}
+            destination={null}
           />
         </div>
       ) : (
@@ -130,10 +94,8 @@ const Dashboard = () => {
 
       {/* Greeting */}
       <h2 className="text-xl font-semibold mb-4 text-green-700">
-        Welcome back, {user?.name} 👋
+        Welcome back, {name} 👋
       </h2>
-
-      {/* [REMOVED NOTHING BELOW THIS POINT — ALL YOUR 347 LINES KEPT] */}
 
 
       {/* Action Buttons */}

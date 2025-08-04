@@ -1,23 +1,33 @@
 import QRCode from "qrcode";
 import Location from "../models/Location.js";
 
-// ✨ Improved NLP extraction with better pattern
 function parseMessage(message) {
-  const fromMatch = message.match(/from\s+(.+?)\s+(to|towards)/i);
-  const toMatch = message.match(/to\s+(.+)/i);
+  let fromMatch = message.match(/from\s+(.+?)\s+(to|towards)\s+(.+)/i);
+  if (fromMatch) {
+    return {
+      source: fromMatch[1].trim(),
+      destination: fromMatch[3].trim(),
+    };
+  }
 
-  const source = fromMatch?.[1]?.trim();
-  const destination = toMatch?.[1]?.trim();
+  let simpleMatch = message.match(/^(.+?)\s+(to|towards)\s+(.+)$/i);
+  if (simpleMatch) {
+    return {
+      source: simpleMatch[1].trim(),
+      destination: simpleMatch[3].trim(),
+    };
+  }
 
-  return { source, destination };
+  return { source: null, destination: null };
 }
 
-// Normalize input string
 const normalize = (str) =>
   str.trim().toLowerCase().replace(/[^a-z0-9\s]/gi, "").replace(/\s+/g, " ");
 
 export const handleUserMessage = async (req, res) => {
   const { message } = req.body;
+
+  console.log("🟡 Received message:", message);
 
   if (!message) {
     return res.status(400).json({ error: "Message is required" });
@@ -25,13 +35,9 @@ export const handleUserMessage = async (req, res) => {
 
   const { source, destination } = parseMessage(message);
 
-  if (
-    !source ||
-    !destination ||
-    normalize(source) === normalize(destination) ||
-    source.length < 2 ||
-    destination.length < 2
-  ) {
+  console.log("🔍 Parsed:", { source, destination });
+
+  if (!source || !destination || normalize(source) === normalize(destination)) {
     return res.json({
       reply: "❌ Please provide a valid source and destination.",
     });
@@ -41,24 +47,27 @@ export const handleUserMessage = async (req, res) => {
     const src = normalize(source);
     const dest = normalize(destination);
 
-    // 🔍 Match with loose regex on city and area
+    console.log("🔤 Normalized:", { src, dest });
+
     const srcLocation = await Location.findOne({
       $or: [
-        { area: { $regex: new RegExp(`\\b${src}\\b`, "i") } },
-        { city: { $regex: new RegExp(`\\b${src}\\b`, "i") } },
+        { area: { $regex: new RegExp(src, "i") } },
+        { city: { $regex: new RegExp(src, "i") } },
       ],
     });
 
     const destLocation = await Location.findOne({
       $or: [
-        { area: { $regex: new RegExp(`\\b${dest}\\b`, "i") } },
-        { city: { $regex: new RegExp(`\\b${dest}\\b`, "i") } },
+        { area: { $regex: new RegExp(dest, "i") } },
+        { city: { $regex: new RegExp(dest, "i") } },
       ],
     });
 
+    console.log("📍 Found Locations:", { srcLocation, destLocation });
+
     if (!srcLocation || !destLocation) {
       return res.json({
-        reply: "🚫 Location not found. Please provide valid source and destination.",
+        reply: "🚫 Location not found. Please use valid names like 'Whitefield', 'Mysore'.",
       });
     }
 
@@ -72,12 +81,14 @@ export const handleUserMessage = async (req, res) => {
 
     const qrCode = await QRCode.toDataURL(JSON.stringify(qrPayload));
 
+    console.log("✅ Generated QR code for:", qrPayload);
+
     return res.json({
       reply: `✅ Ticket booked from ${qrPayload.source} to ${qrPayload.destination}`,
       qrCode,
     });
   } catch (err) {
-    console.error("Chatbot QR Error:", err);
-    return res.status(500).json({ error: "Internal server error" });
+    console.error("❌ Chatbot QR Error:", err);
+    return res.status(500).json({ reply: "⚠️ Internal error. Please try again later." });
   }
 };

@@ -7,11 +7,17 @@ import jsQR from "jsqr";
 
 const cityDistances = {
   "Bangalore-Mysore": 150,
+  "Mysore-Bangalore": 150,
   "Bangalore-Hyderabad": 570,
+  "Hyderabad-Bangalore": 570,
   "Bangalore-Chennai": 350,
+  "Chennai-Bangalore": 350,
   "Mysore-Hyderabad": 720,
+  "Hyderabad-Mysore": 720,
   "Mysore-Chennai": 480,
+  "Chennai-Mysore": 480,
   "Hyderabad-Chennai": 630,
+  "Chennai-Hyderabad": 630,
 };
 
 const calculateFare = (from, to) => {
@@ -22,13 +28,16 @@ const calculateFare = (from, to) => {
   return distance * ratePerKm;
 };
 
+const normalize = (str) =>
+  str.trim().charAt(0).toUpperCase() + str.trim().slice(1).toLowerCase();
+
 const ScanQR = () => {
   const [scanned, setScanned] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [qrFile, setQrFile] = useState(null);
 
   const { status, checkIn, checkOut, resetRide } = useRideStore();
-  const { deductFare, setCoins, coins } = useUserStore();
+  const { deductFare, addCoins } = useUserStore();
   const { addRide } = useRideHistoryStore();
   const navigate = useNavigate();
 
@@ -45,63 +54,57 @@ const ScanQR = () => {
       return;
     }
 
+    const imageBitmap = await createImageBitmap(qrFile);
+    const canvas = document.createElement("canvas");
+    canvas.width = imageBitmap.width;
+    canvas.height = imageBitmap.height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(imageBitmap, 0, 0);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+    const qrCodeData = jsQR(imageData.data, imageData.width, imageData.height);
+    if (!qrCodeData) {
+      setErrorMsg("❌ Could not decode QR code. Try again.");
+      return;
+    }
+
+    const decodedText = qrCodeData.data;
+
     try {
-      const imageBitmap = await createImageBitmap(qrFile);
-      const canvas = document.createElement("canvas");
-      canvas.width = imageBitmap.width;
-      canvas.height = imageBitmap.height;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(imageBitmap, 0, 0);
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-      const qrCodeData = jsQR(imageData.data, imageData.width, imageData.height);
-      if (!qrCodeData) {
-        setErrorMsg("❌ Could not decode QR code. Try again.");
-        return;
+      if (!decodedText.includes("FareWaveTicket")) {
+        throw new Error("Invalid format");
       }
 
-      const decodedText = qrCodeData.data;
+      const parts = decodedText.split("|").map((p) => p.trim());
+      const from = normalize(parts[1]?.split(":")[1] || "");
+      const to = normalize(parts[2]?.split(":")[1] || "");
+      console.log("QR Scan →", from, to); // ✅ Debug
 
-      let parsed;
-      try {
-        parsed = JSON.parse(decodedText);
-      } catch (err) {
-        console.error("QR code is not valid JSON:", decodedText);
-        setErrorMsg("❌ Invalid QR code format.");
-        return;
+      if (!from || !to) {
+        throw new Error("Missing source or destination");
       }
 
-      const { source, destination, timestamp, sourceCoords, destCoords } = parsed;
-
-      if (!source || !destination) {
-        setErrorMsg("❌ Missing source or destination in QR code.");
-        return;
-      }
-
-      if (!sourceCoords || !destCoords) {
-        setErrorMsg("❌ Missing coordinates in QR code.");
-        return;
-      }
+      const time = Date.now();
 
       if (!scanned && status === "idle") {
-        checkIn({ from: source, to: destination, time: timestamp });
+        checkIn({ from, to, time });
         setScanned(true);
         setErrorMsg("");
-        alert(`✅ Checked in: ${source} to ${destination}`);
+        alert(`✅ Checked in: ${from} to ${to}`);
       } else if (scanned && status === "checkedIn") {
-        const fare = calculateFare(source, destination);
+        const fare = calculateFare(from, to);
         deductFare(fare);
         checkOut(Date.now());
 
         addRide({
-          from: source,
-          to: destination,
+          from,
+          to,
           fare,
           date: new Date().toLocaleString(),
         });
 
         const earnedCoins = 5;
-        setCoins(coins + earnedCoins);
+        addCoins(earnedCoins);
 
         setScanned(false);
         setErrorMsg("");
@@ -112,8 +115,8 @@ const ScanQR = () => {
         setErrorMsg("⚠️ Invalid scan flow. Please retry.");
       }
     } catch (err) {
-      console.error("Scan Error:", err);
-      setErrorMsg("❌ Something went wrong while scanning.");
+      console.error("QR Decode Error:", err);
+      setErrorMsg("❌ Invalid QR code format.");
     }
   };
 

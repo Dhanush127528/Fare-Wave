@@ -1,20 +1,20 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import useAuthStore from "../store/authStore";
 
 const AuthPage = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [formData, setFormData] = useState({ name: "", email: "", password: "" });
 
-  const { login, register, loading, error } = useAuthStore();
   const navigate = useNavigate();
 
-  // ✅ Force logout when visiting this page
   useEffect(() => {
-    useAuthStore.getState().logout();
-    localStorage.removeItem("farewave-auth");
-  }, []);
+    // Simulate login success for demo
+    const token = localStorage.getItem("fakeToken");
+    if (token) {
+      navigate("/dashboard");
+    }
+  }, [navigate]);
 
   const toggleForm = () => {
     setIsLogin(!isLogin);
@@ -27,13 +27,9 @@ const AuthPage = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (isLogin) {
-      await login(formData.email, formData.password);
-      navigate("/dashboard"); // ✅ Navigate only after successful login
-    } else {
-      await register(formData.name, formData.email, formData.password);
-      navigate("/dashboard"); // ✅ Navigate only after successful signup
-    }
+    // Simulate successful login/signup
+    localStorage.setItem("fakeToken", "1234567890");
+    navigate("/dashboard");
   };
 
   return (
@@ -95,16 +91,11 @@ const AuthPage = () => {
               required
             />
 
-            {error && (
-              <p className="text-sm text-red-500 text-center -mt-2">{error}</p>
-            )}
-
             <button
               type="submit"
               className="w-full bg-gradient-to-r from-teal-400 to-green-500 text-white py-3 rounded-lg font-semibold hover:opacity-90 transition"
-              disabled={loading}
             >
-              {loading ? "Please wait..." : isLogin ? "Login" : "Signup"}
+              {isLogin ? "Login" : "Signup"}
             </button>
           </form>
 
